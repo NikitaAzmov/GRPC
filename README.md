@@ -11,8 +11,6 @@ client -> domain:443 TLS/h2 -> nginx -> 127.0.0.1:11443 -> remnanode/xray grpc-i
 ## Что внутри
 
 ```text
-configs/
-  remnawave-xray-config-profile.json
 docs/
   TROUBLESHOOTING.md
 scripts/
@@ -116,10 +114,79 @@ curl https://your-domain.example/health
 
 ## Настройка Remnawave
 
-В Remnawave добавь/импортируй Config Profile из файла:
+В Remnawave добавь новый Config Profile и вставь JSON:
 
-```text
-configs/remnawave-xray-config-profile.json
+```json
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "dns": {
+    "servers": [
+      {
+        "address": "https://dns.google/dns-query",
+        "skipFallback": false
+      }
+    ],
+    "queryStrategy": "UseIPv4"
+  },
+  "inbounds": [
+    {
+      "tag": "grpc-inbound",
+      "port": 11443,
+      "listen": "127.0.0.1",
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "none",
+        "grpcSettings": {
+          "multiMode": false,
+          "serviceName": "media.session.poll"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "DIRECT",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "BLOCK",
+      "protocol": "blackhole"
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "ip": [
+          "geoip:private"
+        ],
+        "type": "field",
+        "outboundTag": "BLOCK"
+      },
+      {
+        "type": "field",
+        "protocol": [
+          "bittorrent"
+        ],
+        "outboundTag": "BLOCK"
+      }
+    ]
+  }
+}
 ```
 
 Главные параметры:
@@ -148,7 +215,7 @@ ALPN: h2,http/1.1
 Fingerprint: chrome
 ```
 
-Если меняешь `serviceName` при установке, обязательно поменяй его и в `configs/remnawave-xray-config-profile.json`.
+Если меняешь `serviceName` при установке, обязательно поменяй его и в JSON Config Profile.
 
 ## Что делает скрипт
 
