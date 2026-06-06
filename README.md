@@ -12,6 +12,9 @@ client -> domain:443 TLS/h2 -> nginx -> 127.0.0.1:11443 -> remnanode/xray grpc-i
 
 ```text
 docs/
+  images/
+    remnawave-host-basic.png
+    remnawave-host-advanced.png
   TROUBLESHOOTING.md
 scripts/
   install-remna-grpc.sh
@@ -37,16 +40,28 @@ git clone https://github.com/NikitaAzmov/GRPC.git
 cd GRPC
 ```
 
-2. Запусти установку:
+2. Запусти меню:
 
 ```bash
 chmod +x scripts/install-remna-grpc.sh
 sudo ./scripts/install-remna-grpc.sh
 ```
 
+Откроется:
+
+```text
+========================
+       AZMOV PANEL
+========================
+1. GRPC SETUP
+2. INDEX HTML CONCEPT
+3. OPTIMIZATION
+0. EXIT
+```
+
 ### Одной командой с GitHub
 
-Интерактивный запуск с вопросами домена, email и gRPC serviceName:
+Интерактивный запуск меню:
 
 ```bash
 sudo bash -c 'tmp="$(mktemp)"; curl -fsSL https://raw.githubusercontent.com/NikitaAzmov/GRPC/main/scripts/install-remna-grpc.sh -o "$tmp" && chmod +x "$tmp" && "$tmp"'
@@ -70,14 +85,14 @@ sudo bash install-remna-grpc.sh
 cd GRPC
 ```
 
-3. Запусти установку:
+3. Запусти меню:
 
 ```bash
 chmod +x scripts/install-remna-grpc.sh
 sudo ./scripts/install-remna-grpc.sh
 ```
 
-4. Скрипт спросит:
+4. Выбери `1. GRPC SETUP`. Скрипт спросит:
 
 ```text
 Optimize node network settings? BBR, buffers, fq, optional MTU
@@ -87,6 +102,7 @@ Email for Let's Encrypt
 Remnawave Panel public IP allowed to Node API
 Remnawave Node API port
 gRPC serviceName
+Index HTML concept 1-5
 ```
 
 Оптимизация включает BBR, `fq`, TCP buffers, `tcp_fastopen`, `tcp_mtu_probing`, `txqueuelen 5000` и опциональный MTU. Рекомендуемый MTU по умолчанию: `1476`.
@@ -111,6 +127,16 @@ curl https://your-domain.example/health
 ```json
 {"status":"ok"}
 ```
+
+В конце установки скрипт сам выведет статистику:
+
+- путь к логу установки;
+- публичный IP;
+- DNS через `1.1.1.1` и `8.8.8.8`;
+- HTTP-код сайта;
+- ответ `/health`;
+- слушающие порты `443`, `11443`, Node API port;
+- параметры Host для Remnawave.
 
 ## Настройка Remnawave
 
@@ -215,6 +241,16 @@ ALPN: h2,http/1.1
 Fingerprint: chrome
 ```
 
+Отпечаток (`Fingerprint`) можно использовать разный: `chrome`, `firefox`, `safari` и другие варианты, которые поддерживает клиент. Универсального лучшего значения нет, его нужно тестировать под конкретного клиента, провайдера и маршрут. Если один fingerprint дает высокий ping, нестабильность или плохой connect, попробуй другой.
+
+Пример базовых настроек Host:
+
+![Remnawave host basic settings](docs/images/remnawave-host-basic.png)
+
+Пример расширенных настроек Host:
+
+![Remnawave host advanced settings](docs/images/remnawave-host-advanced.png)
+
 Если меняешь `serviceName` при установке, обязательно поменяй его и в JSON Config Profile.
 
 ## Что делает скрипт
@@ -230,8 +266,35 @@ Fingerprint: chrome
 - Если указан IP панели и Node API port, открывает Node API port только для IP панели.
 - Получает Let's Encrypt сертификат через standalone certbot.
 - Создает decoy-сайт и `/health`.
+- Позволяет выбрать один из 5 разных Index HTML concepts.
 - Настраивает Nginx с TLS HTTP/2 и gRPC proxy на `127.0.0.1:11443`.
 - Сохраняет итоговый Remnawave/Xray profile в `/root/remnawave-grpc-config-profile.json`.
+
+## Index HTML Concepts
+
+Пункт меню `2. INDEX HTML CONCEPT` позволяет сменить заглушку без переустановки gRPC:
+
+```text
+1. Edge Media Monitor - light SaaS status
+2. Northstar Observatory - dark space telemetry
+3. Casa Verde - Italian cafe
+4. Sakura Dispatch - Japanese logistics
+5. Nordic Weather Grid - minimal weather
+```
+
+После выбора концепт пишется в `/var/www/decoy` и Nginx перезагружается.
+
+## Optimization Menu
+
+Пункт меню `3. OPTIMIZATION`:
+
+```text
+1. Default balanced (recommended, MTU 1476)
+2. Low latency (lighter buffers, MTU 1476)
+3. High throughput (larger buffers, MTU 1476)
+4. Custom MTU only
+5. Disable persistent MTU service
+```
 
 ## Проверка после назначения профиля
 
