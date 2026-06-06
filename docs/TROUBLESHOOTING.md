@@ -120,6 +120,41 @@ docker logs remnanode --tail 100
 
 Если inbound не появился, проверь Remnawave profile.
 
+## Remnawave Panel не видит remnanode
+
+Причина: Panel подключается к remnanode по отдельному `NODE_PORT`, например `2222`. Этот порт не относится к клиентскому gRPC на `443`, но нужен для config push, статистики и статуса node.
+
+Проверь на node:
+
+```bash
+cd /opt/remnanode
+grep -E 'NODE_PORT|SECRET_KEY' docker-compose.yml
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+ss -lntp | grep ':2222'
+ufw status verbose
+docker logs remnanode --tail 100
+```
+
+Если `NODE_PORT=2222`, открой его только для IP панели:
+
+```bash
+ufw allow from PANEL_IP to any port 2222 proto tcp
+ufw reload
+```
+
+Проверь с сервера панели:
+
+```bash
+nc -vz NODE_PUBLIC_IP 2222
+```
+
+Если `nc` не подключается:
+
+- проверь firewall провайдера на node;
+- проверь, что в Remnawave Panel указан публичный IP node и правильный port;
+- проверь, что remnanode container запущен;
+- проверь, что `NODE_PORT` в `docker-compose.yml` совпадает с портом в панели.
+
 ## Клиент подключается, но трафик не идет
 
 Проверь:
@@ -134,11 +169,53 @@ docker logs remnanode --tail 100
 
 Также проверь, что в Xray routing не блокируется нужный трафик.
 
+## Высокая задержка или packet loss
+
+Проверь базовую сеть:
+
+```bash
+ping -c 30 1.1.1.1
+ping -c 30 8.8.8.8
+ip -s link show ens3
+tc qdisc show dev ens3
+```
+
+Проверь MTU:
+
+```bash
+ping -M do -s 1472 -c 5 1.1.1.1 || true
+ping -M do -s 1448 -c 5 1.1.1.1 || true
+ping -M do -s 1400 -c 5 1.1.1.1 || true
+```
+
+Если видишь `Frag needed ... mtu = 1476`, попробуй:
+
+```bash
+ip link set dev ens3 mtu 1476
+tc qdisc replace dev ens3 root fq
+ip link set dev ens3 txqueuelen 5000
+systemctl restart nginx
+docker restart remnanode
+```
+
+Чтобы сделать MTU постоянным, включи оптимизацию через установщик или создай systemd service:
+
+```bash
+systemctl status remnawave-network-optimize.service
+```
+
+Откат:
+
+```bash
+ip link set dev ens3 mtu 1500
+systemctl disable --now remnawave-network-optimize.service
+```
+
 ## Нужно открыть Node API порт
 
-Этот kit специально не спрашивает `REMNAIP` и `PORT`, потому что gRPC direct traffic через Nginx их не использует.
+Основной установщик спрашивает IP панели и Node API port. Если ты оставил IP панели пустым или менял порт позже, открой доступ отдельно.
 
-Если Node API нужен твоей панели, открой его отдельно только для IP панели:
+Открывай Node API только для IP панели:
 
 ```bash
 ufw allow from PANEL_IP to any port NODE_API_PORT proto tcp
@@ -146,3 +223,11 @@ ufw status numbered
 ```
 
 Не открывай Node API порт на весь интернет.
+
+Небезопасный вариант, который проще, но не рекомендуется:
+
+```bash
+ufw allow 2222/tcp
+```
+
+Такой вариант позволит подключаться к Node API с любых IP.

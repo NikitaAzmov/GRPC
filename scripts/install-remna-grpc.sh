@@ -24,6 +24,19 @@ ask() {
   printf -v "$var" '%s' "$val"
 }
 
+ask_yes_no() {
+  local var="$1"
+  local prompt="$2"
+  local def="${3:-y}"
+  local val
+  read -rp "$prompt [$def]: " val
+  val="${val:-$def}"
+  case "$val" in
+    y|Y|yes|YES|Yes) printf -v "$var" '%s' "y" ;;
+    *) printf -v "$var" '%s' "n" ;;
+  esac
+}
+
 wait_for_apt_locks() {
   local waited=0
   local holders
@@ -47,11 +60,66 @@ wait_for_apt_locks() {
   done
 }
 
+optimize_node() {
+  local mtu="$1"
+
+  cat >/etc/sysctl.d/99-remnawave-grpc-optimization.conf <<'EOF'
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.ipv4.tcp_rmem = 4096 87380 67108864
+net.ipv4.tcp_wmem = 4096 65536 67108864
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_max_syn_backlog = 65536
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_tw_buckets = 6000
+net.ipv4.tcp_tw_reuse = 1
+EOF
+
+  sysctl --system >/dev/null || true
+
+  if [ -n "$mtu" ]; then
+    ip link set dev ens3 mtu "$mtu" || true
+    mkdir -p /etc/systemd/system/remnawave-network-optimize.service.d
+    cat >/etc/systemd/system/remnawave-network-optimize.service <<EOF
+[Unit]
+Description=Apply Remnawave network optimization
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip link set dev ens3 mtu $mtu
+ExecStart=/usr/sbin/tc qdisc replace dev ens3 root fq
+ExecStart=/usr/sbin/ip link set dev ens3 txqueuelen 5000
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now remnawave-network-optimize.service || true
+  fi
+
+  tc qdisc replace dev ens3 root fq || true
+  ip link set dev ens3 txqueuelen 5000 || true
+}
+
 need_root
 
 echo "=== Remnawave gRPC direct installer ==="
+ask_yes_no OPTIMIZE_NODE "Optimize node network settings? BBR, buffers, fq, optional MTU" "y"
+MTU_VALUE=""
+if [ "$OPTIMIZE_NODE" = "y" ]; then
+  ask MTU_VALUE "Interface MTU, empty to keep current" "1476"
+fi
 ask ORIGIN_DOMAIN "Domain pointed to this server, e.g. gb1.azmov.ru"
 ask EMAIL "Email for Let's Encrypt" "admin@azmov.ru"
+ask PANEL_IP "Remnawave Panel public IP allowed to Node API, empty to skip" ""
+ask NODE_API_PORT "Remnawave Node API port, empty to skip" "2222"
 ask GRPC_SERVICE "gRPC serviceName" "media.session.poll"
 
 wait_for_apt_locks
@@ -92,16 +160,8 @@ systemctl enable --now docker
 cat >/etc/sysctl.d/99-vpn-connection-limits.conf <<'EOF'
 fs.file-max = 2097152
 fs.nr_open = 2097152
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.ipv4.tcp_fastopen = 3
-net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_slow_start_after_idle = 0
-net.core.somaxconn = 65535
-net.ipv4.tcp_max_syn_backlog = 65535
 net.ipv4.ip_local_port_range = 1024 65535
 net.ipv4.tcp_fin_timeout = 15
-net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 30
 net.ipv4.tcp_keepalive_probes = 5
@@ -111,12 +171,18 @@ EOF
 modprobe nf_conntrack || true
 echo nf_conntrack >/etc/modules-load.d/nf_conntrack.conf
 sysctl --system >/dev/null || true
+if [ "$OPTIMIZE_NODE" = "y" ]; then
+  optimize_node "$MTU_VALUE"
+fi
 
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
+if [ -n "$PANEL_IP" ] && [ -n "$NODE_API_PORT" ]; then
+  ufw allow from "$PANEL_IP" to any port "$NODE_API_PORT" proto tcp
+fi
 ufw --force enable
 
 systemctl stop nginx || true
@@ -360,6 +426,26 @@ echo "Service Name: $GRPC_SERVICE"
 echo "Multi Mode: false"
 echo "ALPN: h2,http/1.1"
 echo "Fingerprint: chrome"
+if [ "$OPTIMIZE_NODE" = "y" ]; then
+  echo
+  echo "Network optimization:"
+  echo "BBR/fq/buffers: enabled"
+  if [ -n "$MTU_VALUE" ]; then
+    echo "MTU: $MTU_VALUE"
+  else
+    echo "MTU: unchanged"
+  fi
+fi
+if [ -n "$PANEL_IP" ] && [ -n "$NODE_API_PORT" ]; then
+  echo
+  echo "Node API firewall:"
+  echo "Allowed Panel IP: $PANEL_IP"
+  echo "Allowed Node API port: $NODE_API_PORT/tcp"
+fi
 echo
 echo "After assigning profile to node, run:"
-echo "docker restart remnanode && sleep 10 && ss -lntp | grep -E ':(11443|443)\\b'"
+if [ -n "$NODE_API_PORT" ]; then
+  echo "docker restart remnanode && sleep 10 && ss -lntp | grep -E ':(11443|443|$NODE_API_PORT)\\b'"
+else
+  echo "docker restart remnanode && sleep 10 && ss -lntp | grep -E ':(11443|443)\\b'"
+fi

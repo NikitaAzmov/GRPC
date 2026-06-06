@@ -79,13 +79,21 @@ chmod +x scripts/install-remna-grpc.sh
 sudo ./scripts/install-remna-grpc.sh
 ```
 
-4. Скрипт спросит только:
+4. Скрипт спросит:
 
 ```text
+Optimize node network settings? BBR, buffers, fq, optional MTU
+Interface MTU
 Domain pointed to this server
 Email for Let's Encrypt
+Remnawave Panel public IP allowed to Node API
+Remnawave Node API port
 gRPC serviceName
 ```
+
+Оптимизация включает BBR, `fq`, TCP buffers, `tcp_fastopen`, `tcp_mtu_probing`, `txqueuelen 5000` и опциональный MTU. Рекомендуемый MTU по умолчанию: `1476`.
+
+`Remnawave Node API port` обычно `2222`. Этот порт нужен Panel, чтобы видеть node и отправлять config profile.
 
 Рекомендуемый `gRPC serviceName`:
 
@@ -150,7 +158,9 @@ Fingerprint: chrome
 - Устанавливает `nginx`, `certbot`, `ufw`, `dnsutils` и базовые утилиты.
 - Устанавливает Docker, если его нет.
 - Настраивает системные лимиты и TCP-параметры.
+- По желанию включает сетевую оптимизацию: BBR, `fq`, TCP buffers, `tcp_mtu_probing`, MTU.
 - Открывает в UFW только `22`, `80`, `443`.
+- Если указан IP панели и Node API port, открывает Node API port только для IP панели.
 - Получает Let's Encrypt сертификат через standalone certbot.
 - Создает decoy-сайт и `/health`.
 - Настраивает Nginx с TLS HTTP/2 и gRPC proxy на `127.0.0.1:11443`.
@@ -185,9 +195,57 @@ tail -n 100 /var/log/nginx/grpc_access.log
 docker logs remnanode --tail 100
 ```
 
+Проверка сетевой оптимизации:
+
+```bash
+sysctl net.ipv4.tcp_congestion_control
+sysctl net.core.default_qdisc
+sysctl net.ipv4.tcp_mtu_probing
+ip link show ens3
+tc qdisc show dev ens3
+```
+
+Если MTU `1476` на конкретном провайдере работает хуже, временно верни `1500`:
+
+```bash
+ip link set dev ens3 mtu 1500
+systemctl disable --now remnawave-network-optimize.service
+```
+
+## Если Remnawave Panel не видит Node
+
+Для клиентского gRPC нужен `443`, но для связи Panel -> remnanode нужен отдельный `NODE_PORT` из `docker-compose.yml` remnanode, часто это `2222`.
+
+Если при установке ты пропустил IP панели или порт, открой его только для IP панели:
+
+```bash
+sudo ./scripts/open-remnanode-api.sh
+```
+
+Или вручную:
+
+```bash
+ufw allow from PANEL_IP to any port NODE_API_PORT proto tcp
+ufw reload
+```
+
+Проверь на node:
+
+```bash
+ss -lntp | grep ':2222'
+docker logs remnanode --tail 100
+ufw status verbose
+```
+
+Проверь с сервера панели:
+
+```bash
+nc -vz NODE_PUBLIC_IP 2222
+```
+
 ## Важно
 
-Скрипт не открывает порт Remnawave Node API. Если твоей установке Remnawave нужен отдельный Node API порт, открой его вручную только для IP панели:
+Не открывай Node API port на весь интернет. Безопаснее разрешить доступ только с публичного IP Remnawave Panel:
 
 ```bash
 ufw allow from PANEL_IP to any port NODE_API_PORT proto tcp
