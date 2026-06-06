@@ -282,6 +282,28 @@ Fingerprint: chrome
 5. Nordic Weather Grid - minimal weather
 ```
 
+### Index Preview
+
+1. Edge Media Monitor - light SaaS status
+
+![Edge Media Monitor](docs/images/index1.png)
+
+2. Northstar Observatory - dark space telemetry
+
+![Northstar Observatory](docs/images/index2.png)
+
+3. Casa Verde - Italian cafe
+
+![Casa Verde](docs/images/index3.png)
+
+4. Sakura Dispatch - Japanese logistics
+
+![Sakura Dispatch](docs/images/index4.png)
+
+5. Nordic Weather Grid - minimal weather
+
+![Nordic Weather Grid](docs/images/index5.png)
+
 После выбора концепт пишется в `/var/www/decoy` и Nginx перезагружается.
 
 ## Optimization Menu
