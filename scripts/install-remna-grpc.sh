@@ -54,6 +54,11 @@ ask ORIGIN_DOMAIN "Domain pointed to this server, e.g. gb1.azmov.ru"
 ask EMAIL "Email for Let's Encrypt" "admin@azmov.ru"
 ask GRPC_SERVICE "gRPC serviceName" "media.session.poll"
 
+wait_for_apt_locks
+apt update
+wait_for_apt_locks
+apt install -y curl dnsutils ca-certificates
+
 PUBLIC_IP="$(curl -4fsS ifconfig.me || true)"
 DNS_1="$(dig +short "$ORIGIN_DOMAIN" @1.1.1.1 | tail -n1 || true)"
 DNS_8="$(dig +short "$ORIGIN_DOMAIN" @8.8.8.8 | tail -n1 || true)"
@@ -73,8 +78,6 @@ if [ -n "$PUBLIC_IP" ] && { [ "$DNS_1" != "$PUBLIC_IP" ] || [ "$DNS_8" != "$PUBL
   fi
 fi
 
-wait_for_apt_locks
-apt update
 wait_for_apt_locks
 DEBIAN_FRONTEND=noninteractive apt -y upgrade
 wait_for_apt_locks

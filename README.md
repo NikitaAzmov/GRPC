@@ -11,14 +11,13 @@ client -> domain:443 TLS/h2 -> nginx -> 127.0.0.1:11443 -> remnanode/xray grpc-i
 ## Что внутри
 
 ```text
-remnawave-grpc-kit/
-  configs/
-    remnawave-xray-config-profile.json
-  docs/
-    TROUBLESHOOTING.md
-  scripts/
-    install-remna-grpc.sh
-  README.md
+configs/
+  remnawave-xray-config-profile.json
+docs/
+  TROUBLESHOOTING.md
+scripts/
+  install-remna-grpc.sh
+README.md
 ```
 
 ## Требования
@@ -31,12 +30,46 @@ remnawave-grpc-kit/
 
 ## Быстрый старт
 
-1. Скопируй папку `remnawave-grpc-kit` на сервер.
+### Через Git
+
+1. Склонируй репозиторий на сервер:
+
+```bash
+git clone https://github.com/NikitaAzmov/GRPC.git
+cd GRPC
+```
+
+2. Запусти установку:
+
+```bash
+chmod +x scripts/install-remna-grpc.sh
+sudo ./scripts/install-remna-grpc.sh
+```
+
+### Одной командой с GitHub
+
+Интерактивный запуск с вопросами домена, email и gRPC serviceName:
+
+```bash
+sudo bash -c 'tmp="$(mktemp)"; curl -fsSL https://raw.githubusercontent.com/NikitaAzmov/GRPC/main/scripts/install-remna-grpc.sh -o "$tmp" && chmod +x "$tmp" && "$tmp"'
+```
+
+Если хочешь сначала посмотреть скрипт:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NikitaAzmov/GRPC/main/scripts/install-remna-grpc.sh -o install-remna-grpc.sh
+nano install-remna-grpc.sh
+sudo bash install-remna-grpc.sh
+```
+
+### Из архива/папки
+
+1. Скопируй папку проекта на сервер.
 
 2. Перейди в папку:
 
 ```bash
-cd remnawave-grpc-kit
+cd GRPC
 ```
 
 3. Запусти установку:
